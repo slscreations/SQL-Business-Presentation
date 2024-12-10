@@ -1,0 +1,434 @@
+/* Welcome to my presentation on my eCommerce sales dataset. I've gone through an enhanced/cleansed the dataset in order to present to you, my business client, a dataset that has been munged and freed of any bad data. I've left comments prior to every query to give you an idea of why I've executed each query and what my thought process behind it was. After cleansing the data, I've gone through and created four aggregation tables to give us different views of our dataset. Then, we have a table function and a stored procedure to further examine our dataset in different ways. Lastly, I've also shared with you a dashboard that gives us a quick overview of key business points that will help us make important business decisions. Without further ado, let's dive in! */
+
+/*We will get started with my curation layer (WORKSHEET ONE). In this layer we will be going through and enhancing the data so the final dataset we have will be much easier to work with and run our aggregation queries on. Thank you for your time, let's get started! */
+
+Create SCHEMA IF NOT EXISTS CURATION;
+USE SCHEMA CURATION;
+
+create or replace table salesData as select * from AMAZON_AND_ECOMMERCE_WEBSITES_PRODUCT_VIEWS_AND_PURCHASES.DATAFEEDS.PRODUCT_VIEWS_AND_PURCHASES
+
+SELECT * FROM salesData;
+
+/* The following query will check my salesData table for null values*/
+
+SELECT
+  salesdata.title IS NULL AS title_is_null,
+  salesdata.brand IS NULL AS brand_is_null,
+  salesdata.product IS NULL AS product_is_null,
+  salesdata.main_category IS NULL AS main_category_is_null,
+  salesdata.sub_category IS NULL AS sub_category_is_null,
+  salesdata.site IS NULL AS site_is_null,
+  salesdata.month IS NULL AS month_is_null,
+  salesdata.country IS NULL AS country_is_null,
+  salesdata.estimated_views IS NULL AS estimated_views_is_null,
+  salesdata.estimated_purchases IS NULL AS estimated_purchases_is_null
+FROM
+  salesData;
+
+  /*I have made the business decision to drop all of my rows with null values, because I feel this makes the most sense for my dataset. I don't believe that trying to fill in the null values with surrounding data or making a best case estimate would make the most sense in this case. The following query will create a new table which has dropped all of the columns with null values in them*/
+
+CREATE
+OR REPLACE TABLE salesdata_no_nulls AS
+SELECT
+  salesdata.title,
+  salesdata.brand,
+  salesdata.product,
+  salesdata.main_category,
+  salesdata.sub_category,
+  salesdata.site,
+  salesdata.month,
+  salesdata.country,
+  salesdata.estimated_views,
+  salesdata.estimated_purchases
+FROM
+  salesdata
+WHERE
+  NOT salesdata.title IS NULL
+  AND NOT salesdata.brand IS NULL
+  AND NOT salesdata.product IS NULL
+  AND NOT salesdata.main_category IS NULL
+  AND NOT salesdata.sub_category IS NULL
+  AND NOT salesdata.site IS NULL
+  AND NOT salesdata.month IS NULL
+  AND NOT salesdata.country IS NULL
+  AND NOT salesdata.estimated_views IS NULL
+  AND NOT salesdata.estimated_purchases IS NULL;
+
+/*This query will find the number of duplicate values in only the title column and by individual website.This is important, since all of the other rows are expected to have duplicate values, and it wouldn't make sense to delete them. This query will ensure that the same item is not listed within the same website twice (or more) which will help us get a better view of how well items are selling and ensure the data is not muddled by one item being listed multiple times*/
+
+SELECT
+  site,
+  title,
+  COUNT(*) AS count
+FROM
+  salesdata_rounded
+GROUP BY
+  site,
+  title
+HAVING
+  COUNT(*) > 1;
+
+/*This query will create a new table which has no duplicate values in the title column (within the same website)*/
+
+CREATE
+OR REPLACE TABLE unique_salesdata_rounded AS
+SELECT
+  DISTINCT brand,
+  country,
+  estimated_purchases,
+  estimated_views,
+  main_category,
+  month,
+  product,
+  site,
+  sub_category,
+  title
+FROM
+  salesdata_rounded;
+  
+/* This query will create a new table which has no empty spaces before or after values in every column
+in my salesData table which will make the data easier to read and work with*/
+
+CREATE
+OR REPLACE TABLE salesdata_trimmed AS
+SELECT
+  TRIM(salesdata.title) AS title,
+  TRIM(salesdata.brand) AS brand,
+  TRIM(salesdata.product) AS product,
+  TRIM(salesdata.main_category) AS main_category,
+  TRIM(salesdata.sub_category) AS sub_category,
+  TRIM(salesdata.site) AS site,
+  TRIM(CAST(salesdata.month AS VARCHAR)) AS month,
+  TRIM(CAST(salesdata.country AS VARCHAR)) AS country,
+  TRIM(CAST(salesdata.estimated_views AS VARCHAR)) AS estimated_views,
+  TRIM(CAST(salesdata.estimated_purchases AS VARCHAR)) AS estimated_purchases
+FROM
+  salesdata;
+  
+/* I used this query to see if there are any data values that are outliers, however,
+since none of this data can be considered "bad" data, I've left the outliers in the data set*/
+
+WITH summary_stats AS (
+  SELECT
+    MIN(estimated_views) AS min_estimated_views,
+    MAX(estimated_views) AS max_estimated_views,
+    AVG(estimated_views) AS avg_estimated_views,
+    STDDEV (estimated_views) AS stddev_estimated_views,
+    MIN(estimated_purchases) AS min_estimated_purchases,
+    MAX(estimated_purchases) AS max_estimated_purchases,
+    AVG(estimated_purchases) AS avg_estimated_purchases,
+    STDDEV (estimated_purchases) AS stddev_estimated_purchases
+  FROM
+    salesdata
+),
+outliers AS (
+  SELECT
+    salesdata.title,
+    salesdata.estimated_views,
+    salesdata.estimated_purchases
+  FROM
+    salesdata,
+    summary_stats
+  WHERE
+    salesdata.estimated_views < summary_stats.avg_estimated_views - 3 * summary_stats.stddev_estimated_views
+    OR salesdata.estimated_views > summary_stats.avg_estimated_views + 3 * summary_stats.stddev_estimated_views
+    OR salesdata.estimated_purchases < summary_stats.avg_estimated_purchases - 3 * summary_stats.stddev_estimated_purchases
+    OR salesdata.estimated_purchases > summary_stats.avg_estimated_purchases + 3 * summary_stats.stddev_estimated_purchases
+)
+SELECT
+  *
+FROM
+  outliers;
+
+/* We will now run a query and create a new table so that the very long decimal numbers in the estimated views column, will be rounded to two decimal places and create an updated table with this information*/
+
+SELECT
+  salesdata.product,
+  salesdata.brand,
+  salesdata.main_category,
+  salesdata.sub_category,
+  salesdata.site,
+  salesdata.country,
+  salesdata.month,
+  salesdata.title,
+  ROUND(salesdata.estimated_views, 2) AS estimated_views_rounded,
+  salesdata.estimated_purchases
+FROM
+  salesdata;
+
+CREATE TABLE salesdata_rounded AS
+SELECT
+  salesdata.product,
+  salesdata.brand,
+  salesdata.main_category,
+  salesdata.sub_category,
+  salesdata.site,
+  salesdata.country,
+  salesdata.month,
+  salesdata.title,
+  ROUND(salesdata.estimated_views, 2) AS estimated_views,
+  salesdata.estimated_purchases
+FROM
+  salesdata;
+
+SELECT * FROM SALESDATA_ROUNDED;
+
+/*We will now do the same, except with the estimated_purchases column, again,
+to make for easier viewing for my business client*/
+
+CREATE TABLE salesdata_rounded_purchases AS
+SELECT
+  salesdata_rounded.product,
+  salesdata_rounded.brand,
+  salesdata_rounded.main_category,
+  salesdata_rounded.sub_category,
+  salesdata_rounded.site,
+  salesdata_rounded.country,
+  salesdata_rounded.month,
+  salesdata_rounded.title,
+  salesdata_rounded.estimated_views,
+  ROUND(salesdata_rounded.estimated_purchases, 2) AS estimated_purchases
+FROM
+  salesdata_rounded;
+
+/* This query will change the column name from 'site' to 'website' as I feel that makes more sense to a viewer */
+
+ALTER TABLE
+  salesdata RENAME COLUMN site TO website;
+
+CREATE
+OR REPLACE TABLE salesdata_updated (
+  brand VARCHAR,
+  country DECIMAL(38, 0),
+  estimated_purchases FLOAT,
+  estimated_views FLOAT,
+  main_category VARCHAR,
+  month DECIMAL(38, 0),
+  product VARCHAR,
+  website VARCHAR
+  /* updated column name */,
+  sub_category VARCHAR,
+  title VARCHAR
+);
+
+INSERT INTO
+  salesdata_updated
+SELECT
+  brand,
+  country,
+  estimated_purchases,
+  estimated_views,
+  main_category,
+  month,
+  product,
+  site AS website
+  /* updated column name */,
+  sub_category,
+  title
+FROM
+  salesdata;
+
+  
+SELECT * FROM salesdata_updated;
+
+/* This query will change all of the values in our Country column, from the number 840 to the word USA, which will make it easier for viewers who may not immediately know that 840 stands for the U.S. when they read the data. To do this, we will first have to change the value in the country column from number to VARCHAR*/
+
+CREATE
+OR REPLACE TABLE salesdata_rounded_updated (
+  country VARCHAR,
+  brand VARCHAR,
+  estimated_purchases FLOAT,
+  estimated_views FLOAT,
+  main_category VARCHAR,
+  month DECIMAL(38, 0),
+  product VARCHAR,
+  site VARCHAR,
+  sub_category VARCHAR,
+  title VARCHAR
+);
+INSERT INTO
+  salesdata_rounded_updated
+SELECT
+  CAST(country AS VARCHAR) AS country,
+  brand,
+  estimated_purchases,
+  estimated_views,
+  main_category,
+  month,
+  product,
+  site,
+  sub_category,
+  title
+FROM
+  salesdata_rounded;
+
+UPDATE
+  salesdata_rounded_updated
+SET
+  country = 'USA'
+WHERE
+  country = 840;
+
+SELECT * FROM salesdata_rounded_updated;
+
+/* Lastly, I wanted to create a column that would show my business client on average how many purchases an item received per view. Thus, I create a average_purchases_per_views column to show this data. This will help my business partner make important business decisions such as how well marketing for a specific prodcut is working (higher the purchases per views would mean good marketing and the opposite for poor sales per views). This can also help them decide if they would like to change how a product is being marketed, and whether they'd like to continue selling a product or not! */
+
+ALTER TABLE
+  salesdata
+ADD
+  COLUMN average_purchases_per_views FLOAT;
+UPDATE
+  salesdata
+SET
+  average_purchases_per_views = estimated_purchases / estimated_views;
+
+CREATE
+OR REPLACE TABLE salesdata_with_average_purchases_per_views AS
+SELECT
+  month,
+  estimated_purchases,
+  estimated_views,
+  brand,
+  country,
+  main_category,
+  product,
+  site,
+  sub_category,
+  title,
+  average_purchases_per_views
+FROM
+  salesdata;
+
+
+SELECT * FROM salesdata_with_average_purchases_per_views;
+
+//Now, let's move on to my aggregation layer (WORKSHEET TWO) and see the different views I've pulled together
+
+Create SCHEMA IF NOT EXISTS AGGREGATION;
+USE SCHEMA AGGREGATION;
+
+create or replace table salesData as select * from AMAZON_AND_ECOMMERCE_WEBSITES_PRODUCT_VIEWS_AND_PURCHASES.DATAFEEDS.PRODUCT_VIEWS_AND_PURCHASES
+
+SELECT * FROM salesData;
+
+/* This query will give us an idea of how many products were ordered online per month, giving us a good understanding
+of what months are busiest for online shopping*/
+
+SELECT
+  salesdata.month,
+  COUNT(DISTINCT salesdata.product) AS product_count
+FROM
+  salesdata
+WHERE
+  salesdata.estimated_purchases > 0
+GROUP BY
+  salesdata.month;
+
+CREATE OR REPLACE TABLE distinct_product_counts AS
+SELECT
+  salesdata.brand,
+  COUNT(DISTINCT salesdata.product) AS product_count
+FROM
+  salesdata
+GROUP BY
+  salesdata.brand;
+
+/* This query will show us the sum of items purchased per category, to help us get a better understanding of which categories are most popular*/
+
+SELECT
+  salesdata.main_category,
+  SUM(salesdata.estimated_purchases) AS total_purchases
+FROM
+  salesdata
+WHERE
+  salesdata.estimated_purchases > 0
+GROUP BY
+  salesdata.main_category;
+
+CREATE OR REPLACE TABLE sum_values AS
+SELECT
+  salesdata.brand,
+  SUM(salesdata.estimated_purchases) AS total_purchases,
+  SUM(salesdata.estimated_views) AS total_views
+FROM
+  salesdata
+GROUP BY
+  salesdata.brand;
+
+/* This query will give us an idea of how popular brands are by giving us a view of what the average views are per brand*/
+
+SELECT
+  salesdata.brand,
+  AVG(salesdata.estimated_views) AS average_views
+FROM
+  salesdata
+WHERE
+  salesdata.estimated_views > 0
+GROUP BY
+  salesdata.brand
+ORDER BY
+  salesdata.brand;
+
+CREATE OR REPLACE TABLE average_values AS
+SELECT
+  salesdata.brand,
+  AVG(salesdata.estimated_purchases) AS avg_purchases,
+  AVG(salesdata.estimated_views) AS avg_views
+FROM
+  salesdata
+GROUP BY
+  salesdata.brand;
+
+
+/* Using this query, we can see the correlation between items being viewed and items being purchased */
+
+SELECT
+  CORR(
+    salesdata.estimated_views,
+    salesdata.estimated_purchases
+  ) AS correlation
+FROM
+  salesdata
+WHERE
+  salesdata.estimated_purchases > 0;
+
+CREATE OR REPLACE TABLE correlation_values AS
+SELECT
+  CORR(
+    salesdata.estimated_purchases,
+    salesdata.estimated_views
+  ) AS correlation_value
+FROM
+  salesdata;
+
+//Let's now take a look at my table function (WORKSHEET THREE)
+
+CREATE
+OR REPLACE FUNCTION distinct_product_counts_table () RETURNS TABLE (brand VARCHAR, product_count DECIMAL(38, 0)) AS '\nSELECT brand, COUNT(DISTINCT product) AS product_count\nFROM salesdata\nGROUP BY brand\n';
+
+SELECT
+  *
+FROM
+  TABLE(distinct_product_counts_table());
+
+
+//Here we will take a look at my stored procedure (WORKSHEET FOUR)
+
+CREATE OR REPLACE PROCEDURE sum_values_table ()
+  RETURNS TABLE (brand VARCHAR, total_purchases FLOAT)
+  LANGUAGE SQL
+  AS
+  DECLARE
+    res RESULTSET DEFAULT (SELECT TOP 10 WEBSITE FROM salesdata);
+
+/*SUMMARY (WORKSHEET FIVE)
+A.	
+The name of my dataset is AMAZON_AND_ECOMMERCE_WEBSITES_PRODUCT_VIEWS_AND_PURCHASES. It shows us popular items that were sold on seven different websites, how many times each item was viewed, how many times it sold, the year/month it was sold in, and the country it was sold in. The websites it pulls data from are amazon, target, bestbuy, walmart, staples, and officedepot.
+B.	
+I’ve kept my naming convention very straight forward. My curation layer schema is named Curation, and my aggregation layer schema is named Aggregation.
+C.	
+In my dataset, I updated the site column to read website instead of site, I believe that this will make more sense to the viewer when examining the data. I also altered the country column from a number to a varchar as I don't believe it is intuitive for everyone to know that the number 840 stands for the US. Furthermore, I removed all of the duplicate values found on the same website and removed all columns with null values. The only new value I created was my average_purchases_per_views column. I thought this would be a very important column for my business client to have so they could make important decisions such as how marketing was doing for certain products, whether they wanted to amp up or reduce marketing for certain products, and whether they'd want to take some products off their websites completely due to under performance.
+
+This is what I've put together for my dataset presentation. I hope that with my data enhancements, aggregation tables, and dashboard, it will give you a good picture of what products on major eCommerce websites are doing well, which items are under performing, and which items could use additional time/marketing attentions to maxmize its sales potential!
+
+Thank you! Please feel free to email me with any inquires about this data!
