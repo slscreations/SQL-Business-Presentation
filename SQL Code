@@ -1,6 +1,6 @@
 /* Welcome to my presentation on my eCommerce sales dataset. I've gone through an enhanced/cleansed the dataset in order to present to you, my business client, a dataset that has been munged and freed of any bad data. I've left comments prior to every query to give you an idea of why I've executed each query and what my thought process behind it was. After cleansing the data, I've gone through and created four aggregation tables to give us different views of our dataset. Then, we have a table function and a stored procedure to further examine our dataset in different ways. Lastly, I've also shared with you a dashboard that gives us a quick overview of key business points that will help us make important business decisions. Without further ado, let's dive in! */
 
-/*We will get started with my curation layer (WORKSHEET ONE). In this layer we will be going through and enhancing the data so the final dataset we have will be much easier to work with and run our aggregation queries on. Thank you for your time, let's get started! */
+/*We will get started with my curation layer. In this layer we will be going through and enhancing the data so the final dataset we have will be much easier to work with and run our aggregation queries on. Thank you for your time, let's get started! */
 
 Create SCHEMA IF NOT EXISTS CURATION;
 USE SCHEMA CURATION;
@@ -302,7 +302,7 @@ FROM
 
 SELECT * FROM salesdata_with_average_purchases_per_views;
 
-//Now, let's move on to my aggregation layer (WORKSHEET TWO) and see the different views I've pulled together
+//Now, let's move on to my aggregation layer and see the different views I've pulled together
 
 Create SCHEMA IF NOT EXISTS AGGREGATION;
 USE SCHEMA AGGREGATION;
@@ -401,7 +401,7 @@ SELECT
 FROM
   salesdata;
 
-//Let's now take a look at my table function (WORKSHEET THREE)
+//Let's now take a look at my table function
 
 CREATE
 OR REPLACE FUNCTION distinct_product_counts_table () RETURNS TABLE (brand VARCHAR, product_count DECIMAL(38, 0)) AS '\nSELECT brand, COUNT(DISTINCT product) AS product_count\nFROM salesdata\nGROUP BY brand\n';
@@ -412,7 +412,7 @@ FROM
   TABLE(distinct_product_counts_table());
 
 
-//Here we will take a look at my stored procedure (WORKSHEET FOUR)
+//Here we will take a look at my stored procedure
 
 CREATE OR REPLACE PROCEDURE sum_values_table ()
   RETURNS TABLE (brand VARCHAR, total_purchases FLOAT)
@@ -420,15 +420,3 @@ CREATE OR REPLACE PROCEDURE sum_values_table ()
   AS
   DECLARE
     res RESULTSET DEFAULT (SELECT TOP 10 WEBSITE FROM salesdata);
-
-/*SUMMARY (WORKSHEET FIVE)
-A.	
-The name of my dataset is AMAZON_AND_ECOMMERCE_WEBSITES_PRODUCT_VIEWS_AND_PURCHASES. It shows us popular items that were sold on seven different websites, how many times each item was viewed, how many times it sold, the year/month it was sold in, and the country it was sold in. The websites it pulls data from are amazon, target, bestbuy, walmart, staples, and officedepot.
-B.	
-I’ve kept my naming convention very straight forward. My curation layer schema is named Curation, and my aggregation layer schema is named Aggregation.
-C.	
-In my dataset, I updated the site column to read website instead of site, I believe that this will make more sense to the viewer when examining the data. I also altered the country column from a number to a varchar as I don't believe it is intuitive for everyone to know that the number 840 stands for the US. Furthermore, I removed all of the duplicate values found on the same website and removed all columns with null values. The only new value I created was my average_purchases_per_views column. I thought this would be a very important column for my business client to have so they could make important decisions such as how marketing was doing for certain products, whether they wanted to amp up or reduce marketing for certain products, and whether they'd want to take some products off their websites completely due to under performance.
-
-This is what I've put together for my dataset presentation. I hope that with my data enhancements, aggregation tables, and dashboard, it will give you a good picture of what products on major eCommerce websites are doing well, which items are under performing, and which items could use additional time/marketing attentions to maxmize its sales potential!
-
-Thank you! Please feel free to email me with any inquires about this data!
